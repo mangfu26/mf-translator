@@ -1,0 +1,39 @@
+[package]
+name = "mf-translator"
+version = "0.2.0"
+description = "自带大模型 Key 的桌面翻译工作台"
+edition = "2021"
+
+[lib]
+# `_lib` 后缀用于避免 Windows 上 lib 名与 bin 名冲突
+name = "mf_translator_lib"
+crate-type = ["staticlib", "cdylib", "rlib"]
+
+[build-dependencies]
+tauri-build = { version = "2", features = [] }
+
+[dependencies]
+tauri = { version = "2", features = ["tray-icon"] }
+tauri-plugin-opener = "2"
+tauri-plugin-clipboard-manager = "2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+async-trait = "0.1"
+tokio = { version = "1", features = ["sync", "time", "macros"] }
+tokio-util = "0.7"
+reqwest = { version = "0.12", default-features = false, features = [
+    "json",
+    "stream",
+    "rustls-tls",
+    "gzip",
+] }
+futures-util = "0.3"
+# windows-native：接入 Windows 凭据管理器。keyring v3 无平台 feature 时退化为
+# 永远为空的 mock 存储（写入静默丢失），Key 必须启用真实后端才能落盘。
+keyring = { version = "3", features = ["windows-native"] }
+rusqlite = { version = "0.32", features = ["bundled"] }
+uuid = { version = "1", features = ["v4", "serde"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt", "net", "io-util", "time"] }
