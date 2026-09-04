@@ -27,7 +27,9 @@ pub fn run() {
             let config_store = ConfigStore::new(data_dir.join("config.json"));
             let config = config_store.load();
             let db = history::HistoryDb::open(&data_dir.join("history.db"))?;
+            // Gitee raw 端点返回 302 重定向到实际 CDN 地址，须允许跟随；限制次数防循环。
             let client = reqwest::Client::builder()
+                .redirect(reqwest::redirect::Policy::limited(5))
                 .connect_timeout(std::time::Duration::from_secs(10))
                 .read_timeout(std::time::Duration::from_secs(60))
                 .build()?;
