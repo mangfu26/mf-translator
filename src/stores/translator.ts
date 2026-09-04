@@ -29,7 +29,12 @@ export const useTranslatorStore = defineStore("translator", {
     async translate() {
       if (!this.canTranslate || this.isStreaming) return;
 
-      const config = useSettingsStore().current;
+      // 关键修复：settings store 默认未加载（重启后 current 为 null），
+      // 若尚未初始化，先拉取后端持久化配置，避免误判「未配置供应商」。
+      const settings = useSettingsStore();
+      if (!settings.current && !settings.loaded) await settings.init();
+
+      const config = settings.current;
       if (!config) {
         this.status = "error";
         this.errorMsg = t().workbench.notConfigured;
