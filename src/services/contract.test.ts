@@ -18,6 +18,7 @@ import { invoke } from "./ipc";
 import { getProviderConfig, listPresets, saveProviderConfig, testConnection } from "./config";
 import { cancelTranslation, startTranslation } from "./translate";
 import { clearHistory, deleteHistoryItem, listHistory } from "./history";
+import { checkUpdate } from "./update";
 
 const invokeMock = vi.mocked(invoke);
 
@@ -114,5 +115,10 @@ describe("IPC 参数契约", () => {
 
     await clearHistory();
     expect(invokeMock).toHaveBeenCalledWith("clear_history");
+  });
+
+  it("check_update 无参数调用", async () => {
+    await checkUpdate();
+    expect(invokeMock).toHaveBeenCalledWith("check_update");
   });
 });

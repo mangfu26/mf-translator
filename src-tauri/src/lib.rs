@@ -55,6 +55,7 @@ pub fn run() {
             commands::history::list_history,
             commands::history::delete_history_item,
             commands::history::clear_history,
+            commands::update::check_update,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 应用启动失败");

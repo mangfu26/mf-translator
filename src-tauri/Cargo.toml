@@ -34,6 +34,7 @@ futures-util = "0.3"
 keyring = { version = "3", features = ["windows-native"] }
 rusqlite = { version = "0.32", features = ["bundled"] }
 uuid = { version = "1", features = ["v4", "serde"] }
+semver = "1"
 
 [dev-dependencies]
 tokio = { version = "1", features = ["macros", "rt", "net", "io-util", "time"] }

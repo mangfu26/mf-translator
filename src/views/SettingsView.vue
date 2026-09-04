@@ -1,13 +1,18 @@
 <script setup lang="ts">
-import { computed, onMounted, reactive } from "vue";
+import { computed, onMounted, reactive, ref } from "vue";
+import { openUrl } from "@tauri-apps/plugin-opener";
 import UiButton from "../components/ui/UiButton.vue";
 import UiInput from "../components/ui/UiInput.vue";
+import { errorMessage } from "../services/ipc";
+import { checkUpdate, type UpdateStatus } from "../services/update";
+import { useAppStore } from "../stores/app";
 import { useSettingsStore } from "../stores/settings";
 import { t } from "../i18n";
 import type { ProtocolId } from "../services/config";
 
 const messages = t();
 const settings = useSettingsStore();
+const app = useAppStore();
 
 const protocolOptions: { value: ProtocolId; label: string }[] = [
   { value: "chatCompletions", label: "Chat Completions" },
@@ -81,6 +86,23 @@ async function onSave() {
 function onPresetChange(value: string) {
   form.presetId = value;
   applyPreset(value);
+}
+
+type UpdateState = "idle" | "checking" | "latest" | "available" | "error";
+const updateState = ref<UpdateState>("idle");
+const updateInfo = ref<UpdateStatus | null>(null);
+const updateError = ref("");
+
+async function onCheckUpdate() {
+  updateState.value = "checking";
+  updateError.value = "";
+  try {
+    updateInfo.value = await checkUpdate();
+    updateState.value = updateInfo.value.updateAvailable ? "available" : "latest";
+  } catch (err) {
+    updateState.value = "error";
+    updateError.value = errorMessage(err);
+  }
 }
 </script>
 
@@ -205,5 +227,52 @@ function onPresetChange(value: string) {
         {{ messages.settings.saved }}
       </span>
     </div>
+
+    <section class="mt-2 rounded-xl border border-border bg-card p-4">
+      <div class="flex items-center justify-between">
+        <h3 class="text-sm font-semibold">{{ messages.update.title }}</h3>
+        <span class="text-xs text-muted-foreground">
+          {{ messages.update.current }} v{{ app.engine.appVersion || "–" }}
+        </span>
+      </div>
+
+      <div
+        v-if="updateState === 'available' && updateInfo"
+        class="mt-3 rounded-lg border border-primary/40 bg-primary/10 p-3"
+      >
+        <div class="text-xs font-semibold text-primary">
+          {{ messages.update.available }}：v{{ updateInfo.latestVersion }}
+        </div>
+        <p v-if="updateInfo.notes" class="mt-1 text-xs leading-relaxed text-muted-foreground">
+          {{ updateInfo.notes }}
+        </p>
+        <UiButton
+          variant="primary"
+          size="sm"
+          class="mt-2.5"
+          @click="openUrl(updateInfo.downloadUrl)"
+        >
+          {{ messages.update.download }}
+        </UiButton>
+      </div>
+      <p
+        v-else-if="updateState === 'latest'"
+        class="mt-3 text-xs text-green-600 dark:text-green-400"
+      >
+        {{ messages.update.latest }}
+      </p>
+      <div
+        v-else-if="updateState === 'error'"
+        class="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs leading-relaxed text-red-500"
+      >
+        {{ messages.update.failed }}：{{ updateError }}
+      </div>
+
+      <div class="mt-3">
+        <UiButton :loading="updateState === 'checking'" @click="onCheckUpdate()">
+          {{ updateState === "checking" ? messages.update.checking : messages.update.check }}
+        </UiButton>
+      </div>
+    </section>
   </div>
 </template>
