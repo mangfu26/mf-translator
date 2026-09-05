@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import ThemeToggle from "./ThemeToggle.vue";
+import AlwaysOnTopToggle from "./AlwaysOnTopToggle.vue";
 import { useAppStore, type AppView } from "../stores/app";
 import { t } from "../i18n";
 
@@ -41,6 +42,9 @@ const navItems: { id: AppView; label: string }[] = [
         </button>
       </nav>
     </div>
-    <ThemeToggle />
+    <div class="flex items-center gap-1">
+      <AlwaysOnTopToggle window-label="main" />
+      <ThemeToggle />
+    </div>
   </header>
 </template>

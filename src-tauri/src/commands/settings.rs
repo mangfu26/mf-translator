@@ -160,6 +160,7 @@ pub async fn test_connection(
         source_text: "Hello, world!".to_string(),
         target_language: "简体中文".to_string(),
         source_language: None,
+        mode: Default::default(),
     };
 
     let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel::<TranslationEvent>();
@@ -167,9 +168,15 @@ pub async fn test_connection(
     let cancel = CancellationToken::new();
     let client = state.client.clone();
 
+    // 连接测试同样使用提示词模板（保持一致的质量行为）
+    let prompts = {
+        let store = state.prompt_store.lock().map_err(|_| lock_poisoned())?;
+        crate::translation::prompt::build_prompt_pair(&store, &request)?
+    };
+
     let worker = tauri::async_runtime::spawn(async move {
         protocol_impl
-            .stream(&client, &base_url, &api_key, &request, cancel, tx)
+            .stream(&client, &base_url, &api_key, &request, &prompts, cancel, tx)
             .await
     });
 

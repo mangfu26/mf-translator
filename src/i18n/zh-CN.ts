@@ -25,6 +25,7 @@ export const zhCN = {
   workbench: {
     sourcePlaceholder: "输入要翻译的文本…（Ctrl+Enter 翻译）",
     outputPlaceholder: "译文将出现在这里",
+    clickToCopy: "点击译文任意处即可一键复制",
     autoDetect: "自动检测",
     swap: "交换语言",
     translate: "翻译",
@@ -40,8 +41,13 @@ export const zhCN = {
     auto: "自动检测",
   },
   settings: {
-    title: "供应商配置",
+    title: "设置",
     hint: "选择预设模板可自动填充地址与推荐模型；API Key 只保存在本机系统钥匙串，不会进入配置文件。",
+    tabs: {
+      provider: "供应商",
+      prompt: "提示词",
+      about: "关于",
+    },
     preset: "预设模板",
     custom: "自定义",
     name: "名称",
@@ -76,6 +82,24 @@ export const zhCN = {
     available: "发现新版本",
     download: "前往下载",
     failed: "检查更新失败",
+  },
+  prompt: {
+    title: "提示词模板",
+    hint: "每种翻译风格各有独立的系统提示词。你可微调以优化翻译效果，改动即时生效并保存在本机。",
+    advancedHint: "高级",
+    modified: "已修改",
+    save: "保存",
+    reset: "重置",
+    confirmReset: "确认重置？",
+    resetAll: "全部恢复默认",
+    confirmResetAll: "确认全部重置？",
+    placeholders: "可用占位符（点击复制）",
+    placeholderTarget: "目标语言",
+    placeholderSource: "源语言（未指定时为「自动检测」）",
+    placeholderText: "待翻译原文",
+    copiedChip: "已复制",
+    unsaved: "有未保存的修改",
+    saved: "已保存",
   },
 } as const;
 

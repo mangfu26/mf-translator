@@ -12,6 +12,7 @@ export interface TranslateRequestDto {
   sourceText: string;
   targetLanguage: string;
   sourceLanguage?: string | null;
+  mode: string;
 }
 
 /// 发起流式翻译，返回任务 id（用于取消）。事件经 Channel 推送。

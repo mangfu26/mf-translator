@@ -13,6 +13,7 @@ use tokio::sync::mpsc::UnboundedSender;
 use tokio_util::sync::CancellationToken;
 
 use crate::error::{AppError, AppResult};
+use crate::translation::prompt::TranslationMode;
 
 /// 供应商对话协议。新增协议（如 Anthropic 原生、Gemini 原生）时
 /// 增加变体 + 一个 [`Protocol`] 实现 + presets 路由即可，业务层零改动。
@@ -33,6 +34,9 @@ pub struct TranslateRequest {
     pub target_language: String,
     /// None 表示由模型自动检测源语言。
     pub source_language: Option<String>,
+    /// 翻译模式（默认通用）。
+    #[serde(default)]
+    pub mode: TranslationMode,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize)]
@@ -54,18 +58,28 @@ pub enum TranslationEvent {
 
 pub type EventSender = UnboundedSender<TranslationEvent>;
 
+/// 已生成、可直接发送给模型的 system/user 提示词对。
+/// 由服务层负责从模板生成，协议层无需关心提示词来源（DB 或默认值）。
+#[derive(Debug, Clone)]
+pub struct PromptPair {
+    pub system: String,
+    pub user: String,
+}
+
 /// 协议实现：把 [`TranslateRequest`] 发往上游，并将响应流归一化为事件序列。
 /// `cancel` 被触发时必须尽快中断上游连接并返回 [`AppError::Cancelled`]。
 #[async_trait]
 pub trait Protocol: Send + Sync {
     fn kind(&self) -> ProtocolKind;
 
+    #[allow(clippy::too_many_arguments)] // 协议层需要客户端/地址/密钥/请求/提示词/取消/事件源，聚合反而降低可读性
     async fn stream(
         &self,
         client: &reqwest::Client,
         base_url: &str,
         api_key: &str,
         request: &TranslateRequest,
+        prompts: &PromptPair,
         cancel: CancellationToken,
         tx: EventSender,
     ) -> AppResult<()>;

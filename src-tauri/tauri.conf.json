@@ -19,6 +19,18 @@
         "minWidth": 780,
         "minHeight": 540,
         "center": true
+      },
+      {
+        "label": "quick",
+        "title": "MF 快捷翻译",
+        "width": 420,
+        "height": 560,
+        "resizable": true,
+        "decorations": false,
+        "center": true,
+        "alwaysOnTop": true,
+        "visible": false,
+        "skipTaskbar": true
       }
     ],
     "security": {

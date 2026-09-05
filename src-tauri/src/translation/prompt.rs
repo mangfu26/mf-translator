@@ -1,38 +1,135 @@
-//! 翻译 Prompt 组装。输出约束（只输出译文）内建于系统提示词；
-//! 未来新增翻译模式（学术/润色/口语）只是模板差异，不影响架构。
+//! 翻译领域：翻译模式枚举 + 提示词模板生成。
+//! 提示词从 [`PromptStore`] 读取模板（用户改过则用用户版，未改过用默认），
+//! 替换占位符后动态生成最终发送给模型的提示词。
 
-pub fn system_prompt(target_language: &str) -> String {
-    format!(
-        "你是一个专业的翻译引擎。把用户输入的文本翻译成{target_language}。\n\
-         要求：\n\
-         1. 只输出译文本身，不要任何解释、注释或原文；\n\
-         2. 保持原文的语气、格式与换行；\n\
-         3. 专有名词、代码、URL、邮箱地址保持原样；\n\
-         4. 译文要符合{target_language}的表达习惯，自然流畅。"
-    )
+use serde::{Deserialize, Serialize};
+
+use crate::error::AppResult;
+use crate::prompt_store::{PromptKey, PromptStore};
+use crate::provider::{PromptPair, TranslateRequest};
+
+/// 翻译模式：每种模式独立一条系统提示词模板，可由用户微调。
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub enum TranslationMode {
+    /// 通用：忠于原文，自然通顺（默认）。
+    #[default]
+    General,
+    /// 学术：严谨用词，保留术语与逻辑层次。
+    Academic,
+    /// 口语：更贴近日常对话，轻松自然。
+    Colloquial,
+    /// 润色：优化表达但不改变原意。
+    Polish,
 }
 
-pub fn user_prompt(source_text: &str, source_language: Option<&str>) -> String {
-    match source_language {
-        Some(lang) => format!("源语言：{lang}\n待翻译文本：\n{source_text}"),
-        None => format!("请自动检测源语言。\n待翻译文本：\n{source_text}"),
+impl TranslationMode {
+    pub fn label(&self) -> &'static str {
+        match self {
+            TranslationMode::General => "通用",
+            TranslationMode::Academic => "学术",
+            TranslationMode::Colloquial => "口语",
+            TranslationMode::Polish => "润色",
+        }
     }
+}
+
+/// 把占位符替换为实际值的模板渲染。
+fn render(template: &str, vars: &[(&str, &str)]) -> String {
+    let mut result = template.to_string();
+    for (key, value) in vars {
+        result = result.replace(&format!("{{{key}}}"), value);
+    }
+    result
+}
+
+/// 从模板生成 system/user 提示词对。
+pub fn build_prompt_pair(store: &PromptStore, request: &TranslateRequest) -> AppResult<PromptPair> {
+    let system_key = match request.mode {
+        TranslationMode::General => PromptKey::SystemGeneral,
+        TranslationMode::Academic => PromptKey::SystemAcademic,
+        TranslationMode::Colloquial => PromptKey::SystemColloquial,
+        TranslationMode::Polish => PromptKey::SystemPolish,
+    };
+    let system_template = store.get(system_key)?;
+    let system = render(
+        &system_template,
+        &[("target_language", &request.target_language)],
+    );
+
+    let user_template = store.get(PromptKey::User)?;
+    let user = render(
+        &user_template,
+        &[
+            (
+                "source_language",
+                request.source_language.as_deref().unwrap_or("自动检测"),
+            ),
+            ("source_text", &request.source_text),
+        ],
+    );
+
+    Ok(PromptPair { system, user })
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
-    #[test]
-    fn system_prompt_constrains_output_to_translation_only() {
-        let prompt = system_prompt("英语");
-        assert!(prompt.contains("只输出译文"));
-        assert!(prompt.contains("英语"));
+    fn open_store() -> PromptStore {
+        let path = std::env::temp_dir().join(format!(
+            "mf-prompt-build-test-{}-{}.db",
+            std::process::id(),
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_nanos()
+        ));
+        PromptStore::open(&path).unwrap()
     }
 
     #[test]
-    fn user_prompt_auto_detects_when_source_language_missing() {
-        assert!(user_prompt("hello", None).contains("自动检测"));
-        assert!(user_prompt("hello", Some("日语")).contains("日语"));
+    fn builds_pair_from_defaults() {
+        let store = open_store();
+        let req = TranslateRequest {
+            model: "m".into(),
+            source_text: "hi".into(),
+            target_language: "日语".into(),
+            source_language: Some("英语".into()),
+            mode: TranslationMode::default(),
+        };
+        let pair = build_prompt_pair(&store, &req).unwrap();
+        assert!(pair.system.contains("日语")); // target_language 已替换
+        assert!(pair.user.contains("hi")); // source_text 已替换
+        assert!(pair.user.contains("英语")); // source_language 已替换
+    }
+
+    #[test]
+    fn uses_modified_template() {
+        let store = open_store();
+        store
+            .set_modified(
+                PromptKey::SystemColloquial,
+                "口语模板：翻成 {target_language}",
+            )
+            .unwrap();
+        let req = TranslateRequest {
+            model: "m".into(),
+            source_text: "x".into(),
+            target_language: "中文".into(),
+            source_language: None,
+            mode: TranslationMode::Colloquial,
+        };
+        let pair = build_prompt_pair(&store, &req).unwrap();
+        assert!(pair.system.contains("口语模板"));
+        assert!(pair.system.contains("中文"));
+    }
+
+    #[test]
+    fn mode_serializes_to_camel() {
+        assert_eq!(
+            serde_json::to_string(&TranslationMode::Colloquial).unwrap(),
+            "\"colloquial\""
+        );
     }
 }

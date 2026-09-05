@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use crate::config::{AppConfig, ConfigStore};
 use crate::error::AppError;
 use crate::history::HistoryDb;
+use crate::prompt_store::PromptStore;
 use crate::translation::TaskRegistry;
 
 pub struct AppState {
@@ -13,6 +14,7 @@ pub struct AppState {
     pub config_store: Arc<ConfigStore>,
     pub tasks: Arc<TaskRegistry>,
     pub history: Arc<Mutex<HistoryDb>>,
+    pub prompt_store: Arc<Mutex<PromptStore>>,
 }
 
 pub fn lock_poisoned() -> AppError {

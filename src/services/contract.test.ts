@@ -19,6 +19,7 @@ import { getProviderConfig, listPresets, saveProviderConfig, testConnection } fr
 import { cancelTranslation, startTranslation } from "./translate";
 import { clearHistory, deleteHistoryItem, listHistory } from "./history";
 import { checkUpdate } from "./update";
+import { getPromptTemplates, resetPromptTemplate, savePromptTemplate } from "./prompt";
 
 const invokeMock = vi.mocked(invoke);
 
@@ -86,6 +87,7 @@ describe("IPC 参数契约", () => {
         sourceText: "hi",
         targetLanguage: "简体中文",
         sourceLanguage: null,
+        mode: "general",
       },
       () => {},
     );
@@ -93,7 +95,7 @@ describe("IPC 参数契约", () => {
     const [cmd, args] = invokeMock.mock.calls[0];
     expect(cmd).toBe("translate_text");
     expect(args).toMatchObject({
-      request: { model: "m", sourceText: "hi", targetLanguage: "简体中文" },
+      request: { model: "m", sourceText: "hi", targetLanguage: "简体中文", mode: "general" },
     });
     expect(args?.channel).toBeTypeOf("object");
   });
@@ -120,5 +122,30 @@ describe("IPC 参数契约", () => {
   it("check_update 无参数调用", async () => {
     await checkUpdate();
     expect(invokeMock).toHaveBeenCalledWith("check_update");
+  });
+
+  it("prompt 模板三命令的参数契约", async () => {
+    // get：无参数
+    invokeMock.mockResolvedValueOnce([]);
+    await getPromptTemplates();
+    expect(invokeMock).toHaveBeenCalledWith("get_prompt_templates");
+
+    // save：input { key, content }
+    await savePromptTemplate("system.general", "自定义");
+    expect(invokeMock).toHaveBeenCalledWith("save_prompt_template", {
+      input: { key: "system.general", content: "自定义" },
+    });
+
+    // reset：key 为空传 null
+    await resetPromptTemplate();
+    expect(invokeMock).toHaveBeenCalledWith("reset_prompt_template", {
+      input: { key: null },
+    });
+
+    // reset 指定 key
+    await resetPromptTemplate("system.polish");
+    expect(invokeMock).toHaveBeenCalledWith("reset_prompt_template", {
+      input: { key: "system.polish" },
+    });
   });
 });

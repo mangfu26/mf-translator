@@ -32,10 +32,21 @@ pub async fn translate_text(
 
     let client = state.client.clone();
     let history = state.history.clone();
+    let prompt_store = state.prompt_store.clone();
     let tasks = state.tasks.clone();
 
     tauri::async_runtime::spawn(async move {
-        let _ = translation::run(client, provider, api_key, request, channel, token, history).await;
+        let _ = translation::run(
+            client,
+            provider,
+            api_key,
+            request,
+            channel,
+            token,
+            history,
+            prompt_store,
+        )
+        .await;
         tasks.remove(&id);
     });
     Ok(id)

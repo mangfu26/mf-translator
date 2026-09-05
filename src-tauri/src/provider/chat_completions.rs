@@ -96,18 +96,16 @@ impl Protocol for ChatCompletions {
         base_url: &str,
         api_key: &str,
         request: &TranslateRequest,
+        prompts: &super::PromptPair,
         cancel: CancellationToken,
         tx: EventSender,
     ) -> AppResult<()> {
-        let system = crate::translation::prompt::system_prompt(&request.target_language);
-        let user = crate::translation::prompt::user_prompt(
-            &request.source_text,
-            request.source_language.as_deref(),
-        );
+        let system = &prompts.system;
+        let user = &prompts.user;
 
         let mut req = client
             .post(endpoint(base_url))
-            .json(&build_body(request, &system, &user));
+            .json(&build_body(request, system, user));
         if !api_key.is_empty() {
             req = req.bearer_auth(api_key);
         }

@@ -5,7 +5,7 @@ use std::time::Duration;
 
 use mf_translator_lib::error::AppError;
 use mf_translator_lib::provider::{
-    ChatCompletions, Protocol, Responses, TranslateRequest, TranslationEvent, Usage,
+    ChatCompletions, PromptPair, Protocol, Responses, TranslateRequest, TranslationEvent, Usage,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc::UnboundedReceiver;
@@ -17,6 +17,15 @@ fn sample_request() -> TranslateRequest {
         source_text: "hello".to_string(),
         target_language: "简体中文".to_string(),
         source_language: None,
+        mode: Default::default(),
+    }
+}
+
+/// 测试用的默认提示词对（不依赖真实的 PromptStore）。
+fn sample_prompts() -> PromptPair {
+    PromptPair {
+        system: "你是专业翻译引擎，只输出译文。".to_string(),
+        user: "待翻译：hello".to_string(),
     }
 }
 
@@ -98,6 +107,7 @@ async fn chat_completions_streams_deltas_and_usage() {
             &format!("http://{addr}/v1"),
             "sk-test",
             &sample_request(),
+            &sample_prompts(),
             CancellationToken::new(),
             tx,
         )
@@ -146,6 +156,7 @@ async fn responses_streams_deltas_and_completed() {
             &format!("http://{addr}/v1"),
             "sk-test",
             &sample_request(),
+            &sample_prompts(),
             CancellationToken::new(),
             tx,
         )
@@ -191,6 +202,7 @@ async fn empty_key_omits_authorization_header() {
             &format!("http://{addr}/v1"),
             "",
             &sample_request(),
+            &sample_prompts(),
             CancellationToken::new(),
             tx,
         )
@@ -234,9 +246,18 @@ async fn cancel_interrupts_stalled_stream() {
     let client = reqwest::Client::new();
     let base_url = format!("http://{addr}/v1");
     let request = sample_request();
+    let prompts = sample_prompts();
     let task = tokio::spawn(async move {
         ChatCompletions
-            .stream(&client, &base_url, "sk-test", &request, task_cancel, tx)
+            .stream(
+                &client,
+                &base_url,
+                "sk-test",
+                &request,
+                &prompts,
+                task_cancel,
+                tx,
+            )
             .await
     });
 

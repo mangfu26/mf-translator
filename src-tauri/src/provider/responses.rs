@@ -100,19 +100,17 @@ impl Protocol for Responses {
         base_url: &str,
         api_key: &str,
         request: &TranslateRequest,
+        prompts: &super::PromptPair,
         cancel: CancellationToken,
         tx: EventSender,
     ) -> AppResult<()> {
-        let instructions = crate::translation::prompt::system_prompt(&request.target_language);
-        let input = crate::translation::prompt::user_prompt(
-            &request.source_text,
-            request.source_language.as_deref(),
-        );
+        let instructions = &prompts.system;
+        let input = &prompts.user;
 
         let mut req =
             client
                 .post(endpoint(base_url))
-                .json(&build_body(request, &instructions, &input));
+                .json(&build_body(request, instructions, input));
         if !api_key.is_empty() {
             req = req.bearer_auth(api_key);
         }

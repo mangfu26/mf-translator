@@ -94,7 +94,15 @@ impl HistoryDb {
                 params![KEEP_ROWS],
             )
             .map_err(db_err)?;
-        Ok(())
+        // 强制 checkpoint 落盘，防止强杀/崩溃丢失 WAL 中未合并的翻译记录
+        self.checkpoint()
+    }
+
+    /// 强制 WAL checkpoint 落盘。
+    fn checkpoint(&self) -> AppResult<()> {
+        self.conn
+            .execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")
+            .map_err(db_err)
     }
 
     pub fn list(&self, query: Option<&str>, limit: i64) -> AppResult<Vec<HistoryItem>> {
@@ -152,14 +160,14 @@ impl HistoryDb {
         self.conn
             .execute("DELETE FROM translations WHERE id = ?1", params![id])
             .map_err(db_err)?;
-        Ok(())
+        self.checkpoint()
     }
 
     pub fn clear(&self) -> AppResult<()> {
         self.conn
             .execute("DELETE FROM translations", [])
             .map_err(db_err)?;
-        Ok(())
+        self.checkpoint()
     }
 }
 

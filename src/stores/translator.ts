@@ -2,6 +2,7 @@ import { defineStore } from "pinia";
 import { errorMessage } from "../services/ipc";
 import type { Usage } from "../services/model";
 import { cancelTranslation, startTranslation, type TranslationEvent } from "../services/translate";
+import type { TranslationModeId } from "../constants/translationModes";
 import { t } from "../i18n";
 import { useAppStore } from "./app";
 import { useSettingsStore } from "./settings";
@@ -14,6 +15,7 @@ export const useTranslatorStore = defineStore("translator", {
     output: "",
     sourceLang: "auto",
     targetLang: "简体中文",
+    mode: "general" as TranslationModeId,
     status: "idle" as Status,
     errorMsg: "",
     usage: null as Usage | null,
@@ -24,6 +26,8 @@ export const useTranslatorStore = defineStore("translator", {
   getters: {
     isStreaming: (state) => state.status === "streaming",
     canTranslate: (state) => state.input.trim().length > 0,
+    /// 源语言为「自动检测」时不可交换（否则源/目标会相同）。
+    canSwap: (state) => state.sourceLang !== "auto",
   },
   actions: {
     async translate() {
@@ -54,6 +58,7 @@ export const useTranslatorStore = defineStore("translator", {
         sourceText: this.input,
         targetLanguage: this.targetLang,
         sourceLanguage: this.sourceLang === "auto" ? null : this.sourceLang,
+        mode: this.mode,
       };
 
       try {
@@ -99,11 +104,8 @@ export const useTranslatorStore = defineStore("translator", {
       if (this.status === "streaming") this.status = "idle";
     },
     swapLanguages() {
-      if (this.sourceLang === "auto") {
-        this.sourceLang = this.targetLang;
-        this.targetLang = this.sourceLang;
-        return;
-      }
+      // 源语言处于「自动检测」时禁止交换：交换会让源/目标变得相同，令用户困惑
+      if (this.sourceLang === "auto") return;
       const previous = this.sourceLang;
       this.sourceLang = this.targetLang;
       this.targetLang = previous;

@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { writeText } from "@tauri-apps/plugin-clipboard-manager";
 import UiButton from "../components/ui/UiButton.vue";
 import UiSelect from "../components/ui/UiSelect.vue";
+import ModeSelect from "../components/ui/ModeSelect.vue";
 import { LANGUAGES } from "../constants/languages";
 import { t } from "../i18n";
 import { useTranslatorStore } from "../stores/translator";
@@ -27,6 +28,13 @@ async function copyOutput() {
   copiedTimer = setTimeout(() => {
     copied.value = false;
   }, 1500);
+}
+
+/// 点击译文区任意处一键复制；用户正在拖选文本时不触发
+function onOutputClick() {
+  const selection = window.getSelection();
+  if (selection && selection.toString().length > 0) return;
+  void copyOutput();
 }
 
 const statusLine = computed(() => {
@@ -60,12 +68,18 @@ onBeforeUnmount(() => {
 
 <template>
   <div class="flex h-full flex-col gap-3 p-4">
+    <div class="flex items-center justify-between">
+      <ModeSelect v-model="translator.mode" />
+      <span class="text-[11px] text-muted-foreground">Ctrl+Enter 翻译 · Esc 停止</span>
+    </div>
+
     <div class="flex items-center gap-2">
       <UiSelect v-model="translator.sourceLang" :options="sourceOptions" />
       <UiButton
         variant="ghost"
         size="sm"
         :title="messages.workbench.swap"
+        :disabled="!translator.canSwap"
         @click="translator.swapLanguages()"
       >
         ⇄
@@ -95,7 +109,16 @@ onBeforeUnmount(() => {
 
       <div
         class="relative min-h-0 flex-1 overflow-y-auto rounded-xl border border-border bg-muted/40 p-4"
+        :class="translator.output ? 'cursor-pointer' : ''"
+        :title="translator.output ? messages.workbench.clickToCopy : ''"
+        @click="onOutputClick"
       >
+        <span
+          v-if="copied"
+          class="absolute right-3 top-3 rounded-md bg-primary px-2 py-1 text-[11px] text-primary-foreground shadow"
+        >
+          {{ messages.workbench.copied }}
+        </span>
         <p
           v-if="translator.output"
           class="whitespace-pre-wrap break-words text-sm leading-relaxed select-text"

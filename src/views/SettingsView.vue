@@ -3,6 +3,7 @@ import { computed, onMounted, reactive, ref } from "vue";
 import { openUrl } from "@tauri-apps/plugin-opener";
 import UiButton from "../components/ui/UiButton.vue";
 import UiInput from "../components/ui/UiInput.vue";
+import PromptEditor from "../components/PromptEditor.vue";
 import { errorMessage } from "../services/ipc";
 import { checkUpdate, type UpdateStatus } from "../services/update";
 import { useAppStore } from "../stores/app";
@@ -13,6 +14,14 @@ import type { ProtocolId } from "../services/config";
 const messages = t();
 const settings = useSettingsStore();
 const app = useAppStore();
+
+type SettingsTab = "provider" | "prompt" | "about";
+const activeTab = ref<SettingsTab>("provider");
+const tabs: { id: SettingsTab; label: string }[] = [
+  { id: "provider", label: messages.settings.tabs.provider },
+  { id: "prompt", label: messages.settings.tabs.prompt },
+  { id: "about", label: messages.settings.tabs.about },
+];
 
 const protocolOptions: { value: ProtocolId; label: string }[] = [
   { value: "chatCompletions", label: "Chat Completions" },
@@ -107,172 +116,209 @@ async function onCheckUpdate() {
 </script>
 
 <template>
-  <div class="mx-auto flex h-full w-full max-w-xl flex-col gap-5 overflow-y-auto p-6">
-    <div>
-      <h2 class="text-base font-semibold">{{ messages.settings.title }}</h2>
-      <p class="mt-1 text-xs leading-relaxed text-muted-foreground">
-        {{ messages.settings.hint }}
-      </p>
-    </div>
-
-    <label class="block">
-      <div class="mb-1.5 text-xs font-medium text-muted-foreground">
-        {{ messages.settings.preset }}
-      </div>
-      <UiSelect
-        :model-value="form.presetId"
-        :options="[
-          { value: 'custom', label: messages.settings.custom },
-          ...settings.presets.map((p) => ({ value: p.id, label: p.name })),
-        ]"
-        @update:model-value="onPresetChange"
-      />
-    </label>
-
-    <label class="block">
-      <div class="mb-1.5 text-xs font-medium text-muted-foreground">
-        {{ messages.settings.name }}
-      </div>
-      <UiInput v-model="form.name" :placeholder="messages.settings.custom" />
-    </label>
-
-    <label class="block">
-      <div class="mb-1.5 text-xs font-medium text-muted-foreground">
-        {{ messages.settings.baseUrl }}
-      </div>
-      <UiInput v-model="form.baseUrl" placeholder="https://api.deepseek.com/v1" />
-    </label>
-
-    <label class="block">
-      <div class="mb-1.5 text-xs font-medium text-muted-foreground">
-        {{ messages.settings.model }}
-      </div>
-      <UiInput v-model="form.model" list="preset-models" placeholder="deepseek-chat" />
-      <datalist id="preset-models">
-        <option v-for="m in presetModels" :key="m" :value="m" />
-      </datalist>
-    </label>
-
-    <div>
-      <div class="mb-1.5 text-xs font-medium text-muted-foreground">
-        {{ messages.settings.protocol }}
-      </div>
-      <div class="inline-flex rounded-lg border border-border p-0.5">
-        <button
-          v-for="option in protocolOptions"
-          :key="option.value"
-          type="button"
-          class="rounded-md px-3 py-1.5 text-xs transition-colors"
-          :class="
-            form.protocol === option.value
-              ? 'bg-primary text-primary-foreground'
-              : 'text-muted-foreground hover:bg-accent'
-          "
-          @click="form.protocol = option.value"
-        >
-          {{ option.label }}
-        </button>
-      </div>
-    </div>
-
-    <label class="block">
-      <div class="mb-1.5 text-xs font-medium text-muted-foreground">
-        {{ messages.settings.apiKey }}
-      </div>
-      <UiInput
-        v-model="form.apiKey"
-        type="password"
-        :placeholder="messages.settings.apiKeyPlaceholder"
-      />
-      <p
-        v-if="settings.current?.hasApiKey"
-        class="mt-1.5 text-xs leading-relaxed text-muted-foreground/80"
+  <div class="flex h-full">
+    <!-- 左侧分类导航 -->
+    <aside class="flex w-32 shrink-0 flex-col gap-1 border-r border-border p-3">
+      <h2 class="px-3 pb-2 text-sm font-semibold">{{ messages.settings.title }}</h2>
+      <button
+        v-for="tab in tabs"
+        :key="tab.id"
+        type="button"
+        class="rounded-lg px-3 py-2 text-left text-xs transition-colors"
+        :class="
+          activeTab === tab.id
+            ? 'bg-accent font-medium text-foreground'
+            : 'text-muted-foreground hover:bg-accent/60 hover:text-foreground'
+        "
+        @click="activeTab = tab.id"
       >
-        {{ messages.settings.apiKeySavedHint }}
-      </p>
-    </label>
+        {{ tab.label }}
+      </button>
+    </aside>
 
-    <div
-      v-if="settings.test.status === 'error' || settings.saveError"
-      class="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs leading-relaxed text-red-500"
-    >
-      {{ settings.saveError || settings.test.message }}
-    </div>
-    <div
-      v-else-if="settings.test.status === 'ok'"
-      class="rounded-lg border border-green-500/40 bg-green-500/10 p-3 text-xs text-green-600 dark:text-green-400"
-    >
-      {{ settings.test.message }}
-    </div>
-
-    <div class="flex items-center gap-2">
-      <UiButton
-        :disabled="!form.baseUrl || !form.model"
-        :loading="settings.test.status === 'testing'"
-        @click="onTest()"
-      >
-        {{
-          settings.test.status === "testing" ? messages.settings.testing : messages.settings.test
-        }}
-      </UiButton>
-      <UiButton
-        variant="primary"
-        :disabled="!form.baseUrl || !form.model"
-        :loading="settings.saving"
-        @click="onSave()"
-      >
-        {{ settings.saving ? messages.settings.saving : messages.settings.save }}
-      </UiButton>
-      <span v-if="settings.savedFlash" class="text-xs text-green-600 dark:text-green-400">
-        {{ messages.settings.saved }}
-      </span>
-    </div>
-
-    <section class="mt-2 rounded-xl border border-border bg-card p-4">
-      <div class="flex items-center justify-between">
-        <h3 class="text-sm font-semibold">{{ messages.update.title }}</h3>
-        <span class="text-xs text-muted-foreground">
-          {{ messages.update.current }} v{{ app.engine.appVersion || "–" }}
-        </span>
-      </div>
-
+    <!-- 右侧内容区 -->
+    <div class="min-w-0 flex-1 overflow-y-auto p-6">
+      <!-- 提示词编辑需要更宽的空间 -->
       <div
-        v-if="updateState === 'available' && updateInfo"
-        class="mt-3 rounded-lg border border-primary/40 bg-primary/10 p-3"
+        class="mx-auto flex w-full flex-col gap-4"
+        :class="activeTab === 'prompt' ? 'max-w-2xl' : 'max-w-md'"
       >
-        <div class="text-xs font-semibold text-primary">
-          {{ messages.update.available }}：v{{ updateInfo.latestVersion }}
-        </div>
-        <p v-if="updateInfo.notes" class="mt-1 text-xs leading-relaxed text-muted-foreground">
-          {{ updateInfo.notes }}
-        </p>
-        <UiButton
-          variant="primary"
-          size="sm"
-          class="mt-2.5"
-          @click="openUrl(updateInfo.downloadUrl)"
-        >
-          {{ messages.update.download }}
-        </UiButton>
-      </div>
-      <p
-        v-else-if="updateState === 'latest'"
-        class="mt-3 text-xs text-green-600 dark:text-green-400"
-      >
-        {{ messages.update.latest }}
-      </p>
-      <div
-        v-else-if="updateState === 'error'"
-        class="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs leading-relaxed text-red-500"
-      >
-        {{ messages.update.failed }}：{{ updateError }}
-      </div>
+        <!-- 供应商配置 -->
+        <template v-if="activeTab === 'provider'">
+          <p class="text-xs leading-relaxed text-muted-foreground">
+            {{ messages.settings.hint }}
+          </p>
+          <label class="block">
+            <div class="mb-1.5 text-xs font-medium text-muted-foreground">
+              {{ messages.settings.preset }}
+            </div>
+            <UiSelect
+              :model-value="form.presetId"
+              :options="[
+                { value: 'custom', label: messages.settings.custom },
+                ...settings.presets.map((p) => ({ value: p.id, label: p.name })),
+              ]"
+              @update:model-value="onPresetChange"
+            />
+          </label>
 
-      <div class="mt-3">
-        <UiButton :loading="updateState === 'checking'" @click="onCheckUpdate()">
-          {{ updateState === "checking" ? messages.update.checking : messages.update.check }}
-        </UiButton>
+          <label class="block">
+            <div class="mb-1.5 text-xs font-medium text-muted-foreground">
+              {{ messages.settings.name }}
+            </div>
+            <UiInput v-model="form.name" :placeholder="messages.settings.custom" />
+          </label>
+
+          <label class="block">
+            <div class="mb-1.5 text-xs font-medium text-muted-foreground">
+              {{ messages.settings.baseUrl }}
+            </div>
+            <UiInput v-model="form.baseUrl" placeholder="https://api.deepseek.com/v1" />
+          </label>
+
+          <label class="block">
+            <div class="mb-1.5 text-xs font-medium text-muted-foreground">
+              {{ messages.settings.model }}
+            </div>
+            <UiInput v-model="form.model" list="preset-models" placeholder="deepseek-chat" />
+            <datalist id="preset-models">
+              <option v-for="m in presetModels" :key="m" :value="m" />
+            </datalist>
+          </label>
+
+          <div>
+            <div class="mb-1.5 text-xs font-medium text-muted-foreground">
+              {{ messages.settings.protocol }}
+            </div>
+            <div class="inline-flex rounded-lg border border-border p-0.5">
+              <button
+                v-for="option in protocolOptions"
+                :key="option.value"
+                type="button"
+                class="rounded-md px-3 py-1.5 text-xs transition-colors"
+                :class="
+                  form.protocol === option.value
+                    ? 'bg-primary text-primary-foreground'
+                    : 'text-muted-foreground hover:bg-accent'
+                "
+                @click="form.protocol = option.value"
+              >
+                {{ option.label }}
+              </button>
+            </div>
+          </div>
+
+          <label class="block">
+            <div class="mb-1.5 text-xs font-medium text-muted-foreground">
+              {{ messages.settings.apiKey }}
+            </div>
+            <UiInput
+              v-model="form.apiKey"
+              type="password"
+              :placeholder="messages.settings.apiKeyPlaceholder"
+            />
+            <p
+              v-if="settings.current?.hasApiKey"
+              class="mt-1.5 text-xs leading-relaxed text-muted-foreground/80"
+            >
+              {{ messages.settings.apiKeySavedHint }}
+            </p>
+          </label>
+
+          <div
+            v-if="settings.test.status === 'error' || settings.saveError"
+            class="rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs leading-relaxed text-red-500"
+          >
+            {{ settings.saveError || settings.test.message }}
+          </div>
+          <div
+            v-else-if="settings.test.status === 'ok'"
+            class="rounded-lg border border-green-500/40 bg-green-500/10 p-3 text-xs text-green-600 dark:text-green-400"
+          >
+            {{ settings.test.message }}
+          </div>
+
+          <div class="flex items-center gap-2">
+            <UiButton
+              :disabled="!form.baseUrl || !form.model"
+              :loading="settings.test.status === 'testing'"
+              @click="onTest()"
+            >
+              {{
+                settings.test.status === "testing"
+                  ? messages.settings.testing
+                  : messages.settings.test
+              }}
+            </UiButton>
+            <UiButton
+              variant="primary"
+              :disabled="!form.baseUrl || !form.model"
+              :loading="settings.saving"
+              @click="onSave()"
+            >
+              {{ settings.saving ? messages.settings.saving : messages.settings.save }}
+            </UiButton>
+            <span v-if="settings.savedFlash" class="text-xs text-green-600 dark:text-green-400">
+              {{ messages.settings.saved }}
+            </span>
+          </div>
+        </template>
+
+        <!-- 提示词模板 -->
+        <template v-else-if="activeTab === 'prompt'">
+          <PromptEditor />
+        </template>
+
+        <!-- 关于与更新 -->
+        <template v-else>
+          <section class="rounded-xl border border-border bg-card p-4">
+            <div class="flex items-center justify-between">
+              <h3 class="text-sm font-semibold">{{ messages.update.title }}</h3>
+              <span class="text-xs text-muted-foreground">
+                {{ messages.update.current }} v{{ app.engine.appVersion || "–" }}
+              </span>
+            </div>
+
+            <div
+              v-if="updateState === 'available' && updateInfo"
+              class="mt-3 rounded-lg border border-primary/40 bg-primary/10 p-3"
+            >
+              <div class="text-xs font-semibold text-primary">
+                {{ messages.update.available }}：v{{ updateInfo.latestVersion }}
+              </div>
+              <p v-if="updateInfo.notes" class="mt-1 text-xs leading-relaxed text-muted-foreground">
+                {{ updateInfo.notes }}
+              </p>
+              <UiButton
+                variant="primary"
+                size="sm"
+                class="mt-2.5"
+                @click="openUrl(updateInfo.downloadUrl)"
+              >
+                {{ messages.update.download }}
+              </UiButton>
+            </div>
+            <p
+              v-else-if="updateState === 'latest'"
+              class="mt-3 text-xs text-green-600 dark:text-green-400"
+            >
+              {{ messages.update.latest }}
+            </p>
+            <div
+              v-else-if="updateState === 'error'"
+              class="mt-3 rounded-lg border border-red-500/40 bg-red-500/10 p-3 text-xs leading-relaxed text-red-500"
+            >
+              {{ messages.update.failed }}：{{ updateError }}
+            </div>
+
+            <div class="mt-3">
+              <UiButton :loading="updateState === 'checking'" @click="onCheckUpdate()">
+                {{ updateState === "checking" ? messages.update.checking : messages.update.check }}
+              </UiButton>
+            </div>
+          </section>
+        </template>
       </div>
-    </section>
+    </div>
   </div>
 </template>

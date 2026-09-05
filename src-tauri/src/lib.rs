@@ -2,6 +2,7 @@ pub mod commands;
 pub mod config;
 pub mod error;
 pub mod history;
+pub mod prompt_store;
 pub mod provider;
 pub mod state;
 pub mod translation;
@@ -11,15 +12,28 @@ use std::sync::{Arc, Mutex};
 use tauri::menu::{Menu, MenuItem};
 use tauri::tray::{TrayIconBuilder, TrayIconEvent};
 use tauri::{Manager, WindowEvent};
+use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
 
 use crate::config::ConfigStore;
 use crate::state::AppState;
+
+/// 默认全局快捷键：Alt+Shift+T（后续从配置读取自定义值）
+const DEFAULT_QUICK_SHORTCUT: &str = "Alt+Shift+T";
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_clipboard_manager::init())
+        .plugin(
+            tauri_plugin_global_shortcut::Builder::new()
+                .with_handler(|app, shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        toggle_quick_window(app, shortcut);
+                    }
+                })
+                .build(),
+        )
         .setup(|app| {
             let data_dir = app.path().app_data_dir().expect("无法解析应用数据目录");
             std::fs::create_dir_all(&data_dir)?;
@@ -27,6 +41,7 @@ pub fn run() {
             let config_store = ConfigStore::new(data_dir.join("config.json"));
             let config = config_store.load();
             let db = history::HistoryDb::open(&data_dir.join("history.db"))?;
+            let prompts = prompt_store::PromptStore::open(&data_dir.join("prompts.db"))?;
             // Gitee raw 端点返回 302 重定向到实际 CDN 地址，须允许跟随；限制次数防循环。
             let client = reqwest::Client::builder()
                 .redirect(reqwest::redirect::Policy::limited(5))
@@ -40,7 +55,12 @@ pub fn run() {
                 config_store: Arc::new(config_store),
                 tasks: Arc::new(translation::TaskRegistry::default()),
                 history: Arc::new(Mutex::new(db)),
+                prompt_store: Arc::new(Mutex::new(prompts)),
             });
+
+            // 注册全局快捷键（Alt+Shift+T）——后续改为读配置自定义值
+            let shortcut: Shortcut = DEFAULT_QUICK_SHORTCUT.parse().expect("默认快捷键解析失败");
+            app.global_shortcut().register(shortcut)?;
 
             setup_tray(app)?;
             setup_main_window(app)?;
@@ -58,6 +78,13 @@ pub fn run() {
             commands::history::delete_history_item,
             commands::history::clear_history,
             commands::update::check_update,
+            commands::window::get_window_state,
+            commands::window::set_always_on_top,
+            commands::window::hide_quick_window,
+            commands::window::toggle_always_on_top,
+            commands::prompt::get_prompt_templates,
+            commands::prompt::save_prompt_template,
+            commands::prompt::reset_prompt_template,
         ])
         .run(tauri::generate_context!())
         .expect("Tauri 应用启动失败");
@@ -112,4 +139,18 @@ fn setup_main_window(app: &mut tauri::App) -> tauri::Result<()> {
         }
     });
     Ok(())
+}
+
+/// 全局快捷键回调：检测到快捷小窗快捷键时，切换其显示/隐藏。
+fn toggle_quick_window<M: Manager<tauri::Wry>>(manager: &M, _shortcut: &Shortcut) {
+    if let Some(window) = manager.get_webview_window("quick") {
+        let visible = window.is_visible().unwrap_or(false);
+        if visible {
+            let _ = window.hide();
+        } else {
+            let _ = window.show();
+            let _ = window.unminimize();
+            let _ = window.set_focus();
+        }
+    }
 }
