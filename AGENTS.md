@@ -48,8 +48,10 @@ git merge develop/i18n-russian
 
 ### 1.4 禁止事项
 
-- 禁止直接在 `main` 上提交代码（所有变更必须经由 `develop/xxx` 分支合并进入）
+- 禁止直接在 `main` 上提交代码（所有变更必须经由 `develop/xxx` 分支合并进入）。
+  **唯一例外**：发布定稿提交（`chore(release): vX.Y.Z`，见 1.7）允许直接在 `main` 上进行
 - 禁止主动创建或推送 git 标签——**标签仅在维护者明确要求时才打**
+  （发布打 tag 属于 1.7 发布流程的正常环节，同样需维护者指示后执行）
 
 ### 1.5 合并控制权（强制）
 
@@ -59,12 +61,26 @@ git merge develop/i18n-russian
 - 开发完成并验证通过后，AI Agent 应**汇报完成情况**，并**等待维护者明确指示是否合并**
 - 维护者确认合并后，AI Agent 还需**再次询问采用哪种合并方式**（如普通 `merge` / `--no-ff` / `rebase` / `squash`），并**确认是否删除该开发分支**
 - 接到明确的合并指示与方式后，才可执行合并；未获指示前不要合并、不要推送开发分支到远程
+- **既定实践**：合并完成后删除该开发分支（本地与远程）；开发分支本身可按维护者指示推送到远程（如供审阅）
 
 ### 1.6 未约定事项（遇到时询问维护者，勿自行决定）
 
-- 合并后是否删除开发分支
-- 远程仓库是否推送 `develop/xxx` 开发分支，还是仅推送 `main`
-  （现有实践：仅推送 `main`，开发分支保留在本地，仅供参考）
+- 未指明合并方式时的默认值不存在——每次都必须询问，不得沿用上次的猜测
+
+### 1.7 版本发布流程（不设长期 release 分支）
+
+发布与功能开发职责分离：**功能归 `develop/xxx`，发布动作归 `main` + tag**。每次发布三步：
+
+1. **合并功能**：待发布的 `develop/xxx` 按 1.5 规则合并进 `main`
+2. **发布定稿**：在 `main` 上做一个独立提交 `chore(release): vX.Y.Z`，内容必须包含：
+   - 版本号**三处同步**：`package.json`、`src-tauri/tauri.conf.json`、`src-tauri/Cargo.toml`
+   - `update.json`：`version` 与 `notes` 同步更新（**漏改则用户端"检查更新"检测不到新版**）
+3. **打 tag 发布**：推送 tag `vX.Y.Z`（**tag 必须与 `tauri.conf.json` 的 version 一致**，
+   Release 的 tag 名由该配置生成），随后按第 3 章 CI 自动构建，维护者在 Releases 页
+   检查草稿后手动 **Publish** 正式发布
+
+**不使用长期 release 分支**；若发布定稿期间需要冻结修改，可建 `release/vX.Y.Z` 短期分支，
+定稿合并回 `main` 后即删除。历史发布点以 tag 为凭证（如需基于旧版本修 bug，从对应 tag 拉分支）。
 
 ---
 
@@ -151,3 +167,45 @@ Refs: #123
 - **回归防线**：改动 IPC 命令签名时，提交信息正文应说明前后端两侧是否同步
   （参见 `src/services/contract.test.ts` 的由来）
 - 所有提交（包括 `main` 上经合并产生的提交）都遵循本规范
+
+---
+
+## 3. CI/CD 与应用更新机制
+
+> 仓库托管于 **GitHub（mangfu26/mf-translator）**。项目曾托管 Gitee，已整体迁移，
+> **勿再引入任何 Gitee 引用**（代码、文档、URL 均不可）。
+
+### 3.1 工作流触发规则（改 workflow 前必读）
+
+| Workflow                        | 触发条件                        | 作用                                                                                                               |
+| ------------------------------- | ------------------------------- | ------------------------------------------------------------------------------------------------------------------ |
+| `.github/workflows/ci.yml`      | push 到 `main`、面向 main 的 PR | **质量门禁**：前端 lint / format:check / typecheck / vitest / build（Ubuntu）+ Rust fmt / clippy / test（Windows） |
+| `.github/workflows/release.yml` | **仅推送 `v*` tag**             | Windows runner 构建 NSIS + MSI 安装包，自动创建 **GitHub Release 草稿**并挂载附件                                  |
+
+- 两条流水线互不影响：推 main 只跑门禁，打 tag 只跑构建
+- **推 main 前必须本地全绿**（含 `npm run format:check`）——曾有功能改动漏跑格式化
+  导致 CI 失败的先例；Prettier 格式问题以 CI（Linux/LF）判定为准，本地 CRLF 行尾噪音不算
+- Release 产物当前**仅 Windows 平台**；扩展 macOS/Linux 需修改 release.yml 的构建矩阵
+- Release 为**草稿模式**（`releaseDraft: true`）：构建成功后须维护者在 Releases 页
+  检查草稿并手动 **Publish** 才正式可见（防止坏包直接公开）
+
+### 3.2 应用内更新机制（改发布相关代码前必读）
+
+- 应用「检查更新」读取 **main 分支 raw 的 `update.json`**，URL 硬编码于
+  `src-tauri/src/commands/update.rs` 的 `UPDATE_MANIFEST_URL`
+  （`https://raw.githubusercontent.com/mangfu26/mf-translator/main/update.json`）
+- **`update.json` 的变更必须落在 `main` 分支**——改在其他分支用户端永远读不到；
+  这就是 1.7 发布流程中它必须随 `chore(release)` 提交进 main 的原因
+- 版本比较逻辑：清单 `version`（semver）**严格大于**当前应用版本才提示更新，
+  允许 `v` 前缀；`downloadUrl` 跳转 GitHub Releases 页
+- GitHub 公开仓库的 Release 附件**无需登录**即可下载（这是从 Gitee 迁移的原因之一）
+- 已知问题：`raw.githubusercontent.com` 国内访问偶发超时（表现为"检查更新"报
+  网络异常）；备选方案为 jsDelivr CDN 多源回退（**尚未实施**，维护者未拍板）
+
+### 3.3 数据存储位置（排查"数据丢失"类问题前必读）
+
+- `%APPDATA%/com.mftranslator.app/`：`config.json`（供应商配置，仅存 `apiKeyRef` 引用）、
+  `history.db`（翻译历史）、`prompts.db`（提示词模板）——均为 SQLite WAL 模式
+- **API Key 明文只存 Windows 凭据管理器**（keyring crate），配置文件与仓库中均无明文
+- 所有用户写入（保存模板、翻译落库）后均执行 `wal_checkpoint(TRUNCATE)` 强制落盘——
+  此前发生过强杀进程导致 WAL 未合并数据丢失的事故，**勿移除这些 checkpoint 调用**
