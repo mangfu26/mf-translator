@@ -9,8 +9,9 @@ use crate::error::{AppError, AppResult};
 use crate::provider::transport_error;
 use crate::state::AppState;
 
-/// 更新清单托管在公开仓库 main 分支（Gitee raw），发布新版时随仓库更新。
-const UPDATE_MANIFEST_URL: &str = "https://gitee.com/mangfu-it/mf-translator/raw/main/update.json";
+/// 更新清单托管在公开仓库 main 分支（GitHub raw），发布新版时随仓库更新。
+const UPDATE_MANIFEST_URL: &str =
+    "https://raw.githubusercontent.com/mangfu26/mf-translator/main/update.json";
 
 #[derive(Debug, Deserialize)]
 #[serde(rename_all = "camelCase")]
