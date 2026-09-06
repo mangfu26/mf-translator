@@ -1,0 +1,41 @@
+name: Release
+
+# 仅在推送 v 开头的 tag 时触发：自动构建 Windows 安装包并创建 GitHub Release（草稿）。
+# 与 ci.yml（main/PR 质量门禁）互不影响。
+on:
+  push:
+    tags:
+      - "v*"
+
+jobs:
+  publish:
+    permissions:
+      contents: write # tauri-action 需要：创建 Release 并上传安装包
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: src-tauri
+
+      - run: npm ci
+
+      # tagName 中的 __VERSION__ 取自 tauri.conf.json 的 version，
+      # 因此 tag 必须与配置中的版本号一致（如 tag v0.3.0 ↔ version 0.3.0）。
+      - uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          tagName: v__VERSION__
+          releaseName: "MF 翻译 v__VERSION__"
+          releaseBody: "下载下方 Assets 中的安装包（x64-setup.exe 或 .msi）完成安装。"
+          releaseDraft: true
+          prerelease: false
