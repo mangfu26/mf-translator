@@ -1,6 +1,6 @@
 [package]
 name = "mf-translator"
-version = "0.2.0"
+version = "0.1.0"
 description = "自带大模型 Key 的桌面翻译工作台"
 edition = "2021"
 
